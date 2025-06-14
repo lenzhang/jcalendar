@@ -13,6 +13,10 @@
 
 #include "version.h"
 
+#ifdef ESP32C3_BUILD
+#include <SPI.h>  // ESP32-C3需要手动SPI配置
+#endif
+
 // ESP32-C3兼容性配置
 #ifdef ESP32C3_BUILD
     #include "esp32c3_pins.h"
@@ -68,17 +72,31 @@ void buttonLongPressStop(void* oneButton);
 void go_sleep();
 
 unsigned long _idle_millis;
-unsigned long TIME_TO_SLEEP = 180 * 1000;
+unsigned long TIME_TO_SLEEP = 600 * 1000;  // 10分钟配网超时
 
 bool _wifi_flag = false;
 unsigned long _wifi_failed_millis;
 void setup() {
-    delay(10);
+    delay(2000);  // ESP32-C3启动延迟
+    
     Serial.begin(115200);
+    delay(1000);
+    
+#ifdef ESP32C3_BUILD
+    Serial.println("=== ESP32-C3 DEBUG START ===");
+    Serial.println("Serial initialized at 115200 baud");
+    Serial.flush();
+    delay(500);
+#endif
+    
     Serial.println(".");
+    Serial.flush();
+    delay(100);
+    
     print_wakeup_reason();
     Serial.println("\r\n\r\n\r\n");
-    delay(10);
+    Serial.flush();
+    delay(100);
 
     button.setClickMs(300);
     button.setPressMs(3000); // 设置长按的时长
@@ -94,46 +112,103 @@ void setup() {
     Serial.printf("***********************\r\n\r\n");
     Serial.printf("Copyright © 2022-2025 JADE Software Co., Ltd. All Rights Reserved.\r\n\r\n");
 
-#ifdef ESP32C3_BUILD
-    Serial.println("检测到ESP32-C3构建配置");
-    Serial.printf("按钮引脚: GPIO%d\n", PIN_BUTTON_USED);
-    Serial.printf("LED引脚: GPIO%d\n", PIN_LED);
-    Serial.printf("屏幕引脚: CS=%d, DC=%d, RST=%d, BUSY=%d\n", 
-                  EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN);
-    
-    // 执行开机屏幕测试
-    Serial.println("开始执行开机屏幕测试...");
-    si_screen_test();
-    
-    // 等待屏幕测试完成
-    delay(3000);
-    
-    if (si_screen_test_passed()) {
-        Serial.println("屏幕测试通过，继续执行主程序");
-    } else {
-        Serial.println("屏幕测试失败，请检查接线");
-    }
-#endif
+    // ESP32-C3 正常启动流程
+    Serial.println("=== ESP32-C3 正常启动 ===");
+    Serial.flush();
 
+    Serial.println("=== Initializing LED ===");
+    Serial.flush();
+    delay(100);
     led_init();
     led_fast();
-    Serial.println("Wm begin...");
+    
+    Serial.println("=== 检查WiFi配置状态 ===");
+    Serial.flush();
+    delay(100);
+    
+    // 检查是否有WiFi配置
     wm.setHostname("J-Calendar");
     wm.setEnableConfigPortal(false);
     wm.setConnectTimeout(10);
+    
+    // 尝试自动连接WiFi，这会自动检测是否有保存的配置
+    Serial.println("=== 尝试自动连接WiFi ===");
+    
+    // 调试：检查WiFiManager的getWiFiIsSaved()方法
+    bool wmSaved = wm.getWiFiIsSaved();
+    Serial.print("WiFiManager.getWiFiIsSaved(): ");
+    Serial.println(wmSaved ? "true" : "false");
+    Serial.flush();
+    
+    // 调试：检查WiFi.SSID()方法
+    String currentSSID = WiFi.SSID();
+    Serial.print("WiFi.SSID(): '");
+    Serial.print(currentSSID);
+    Serial.print("' (长度: ");
+    Serial.print(currentSSID.length());
+    Serial.println(")");
+    Serial.flush();
+    
+    // 设置一个较短的连接超时时间来快速检测
+    wm.setConnectTimeout(5);
+    Serial.println("开始autoConnect()...");
+    
     if (wm.autoConnect()) {
-        Serial.println("Connect OK.");
-        led_on();
+        // WiFi连接成功
+        Serial.println("=== WiFi连接成功 ===");
+        Serial.flush();
+        led_on(); // 常亮表示连接成功
         _wifi_flag = true;
     } else {
-        Serial.println("Connect failed.");
-        _wifi_flag = false;
-        _wifi_failed_millis = millis();
-        led_slow();
-        _sntp_exec(2);
-        weather_exec(2);
-        WiFi.mode(WIFI_OFF); // 提前关闭WIFI，省电
-        Serial.println("Wifi closed.");
+        // WiFi连接失败，通过WiFi状态判断是否有配置
+        Serial.println("=== WiFi连接失败 ===");
+        Serial.flush();
+        
+        // 更可靠的方法：检查WiFi状态和SSID
+        String savedSSID = WiFi.SSID();
+        bool hasValidConfig = (savedSSID.length() > 0 && !savedSSID.equals(""));
+        
+        Serial.printf("保存的SSID: '%s' (长度: %d)\n", savedSSID.c_str(), savedSSID.length());
+        
+        if (!hasValidConfig) {
+            // 没有有效的WiFi配置 - 进入配网等待模式
+            Serial.println("=== 未检测到有效WiFi配置，显示配网引导 ===");
+            Serial.println("这是一台新设备或WiFi配置已被清除");
+            Serial.println("请双击按钮启动配网模式");
+            
+            _wifi_flag = false;
+            _wifi_failed_millis = millis();
+            led_slow(); // 慢闪表示需要配置
+            
+            // 显示配网引导界面
+            si_show_wifi_config_guide();
+            
+            // 跳过网络相关任务，设置为完成状态避免在loop中执行
+            _sntp_exec(2);  // 设置SNTP状态为跳过
+            weather_exec(2); // 设置天气状态为跳过
+            // 不关闭WiFi，保持STA模式以便后续启动AP配网
+            Serial.println("=== 等待用户配网，不进入休眠 ===");
+            
+        } else {
+            // 有WiFi配置但连接失败 - 可能是网络问题
+            Serial.println("=== WiFi配置存在但连接失败 ===");
+            Serial.printf("尝试连接到: %s\n", savedSSID.c_str());
+            Serial.println("可能原因：密码错误、网络不可用、信号弱等");
+            Serial.println("可以双击按钮重新配置，或等待重试");
+            
+            _wifi_flag = false;
+            _wifi_failed_millis = millis();
+            led_slow(); // 慢闪表示连接失败
+            
+            // 显示WiFi连接失败界面
+            si_show_wifi_retry();
+            
+            // 跳过网络相关任务，准备休眠重试
+            _sntp_exec(2);
+            weather_exec(2);
+            WiFi.mode(WIFI_OFF);
+            Serial.println("=== WiFi连接失败，60秒后休眠重试 ===");
+        }
     }
 }
 
@@ -171,13 +246,21 @@ void loop() {
     // 刷新日历
     // 前置任务：sntp、weather
     // 执行条件：屏幕状态为待处理
-    if (_sntp_status() > 0 && weather_status() > 0 && si_screen_status() == -1) {
+    // 注意：weather_status() == 3 表示配置无效，不应该触发屏幕刷新
+    if (_sntp_status() > 0 && weather_status() > 0 && weather_status() != 3 && si_screen_status() == -1) {
         // 数据获取完毕后，关闭Wifi，省电
         if (!wm.getConfigPortalActive()) {
             WiFi.mode(WIFI_OFF);
         }
         Serial.println("Wifi closed after data fetch.");
 
+        si_screen();
+    } else if (_sntp_status() > 0 && weather_status() == 3 && si_screen_status() == -1) {
+        // 天气配置无效，但时间同步成功，显示无天气信息的日历
+        if (!wm.getConfigPortalActive()) {
+            WiFi.mode(WIFI_OFF);
+        }
+        Serial.println("Wifi closed after data fetch. Weather config invalid, showing calendar without weather.");
         si_screen();
     }
 
@@ -186,16 +269,75 @@ void loop() {
 
     // 未在配置状态，且屏幕刷新完成，进入休眠
     if (!wm.getConfigPortalActive() && si_screen_status() > 0) {
+        // 添加启动后的延迟，给用户30秒时间进行操作
+        static unsigned long startupTime = millis();
+        if (millis() - startupTime < 30 * 1000) {
+            // 启动后30秒内，每5秒更新一次屏幕倒计时
+            static unsigned long lastStartupPrompt = 0;
+            if (millis() - lastStartupPrompt > 5 * 1000) {
+                int remainingSeconds = 30 - (int)((millis() - startupTime) / 1000);
+                Serial.printf("=== 启动后等待用户操作中 (%d/30秒)，双击按钮可进入配网模式 ===\n", 
+                             30 - remainingSeconds);
+                
+                // 在屏幕上显示等待界面
+                si_show_startup_waiting(remainingSeconds);
+                
+                lastStartupPrompt = millis();
+            }
+            return; // 30秒内不进入休眠
+        }
+        
         if(_wifi_flag) {
             go_sleep();
         }
-        if(!_wifi_flag && millis() - _wifi_failed_millis > 10 * 1000) { // 如果wifi连接不成功，等待10秒休眠
+        // 检查是否有WiFi配置
+        String savedSSID = WiFi.SSID();
+        bool hasValidConfig = (savedSSID.length() > 0 && !savedSSID.equals(""));
+        
+        if(!_wifi_flag && hasValidConfig && millis() - _wifi_failed_millis > 60 * 1000) {
+            // 有WiFi配置但连接失败，60秒后休眠重试
+            Serial.println("=== WiFi配置存在但连接失败，60秒后休眠重试 ===");
             go_sleep();
+        } else if (!_wifi_flag && !hasValidConfig) {
+            // 没有WiFi配置，保持等待状态，不休眠
+            // 每60秒更新一次屏幕提示
+            static unsigned long lastPrompt = 0;
+            if (millis() - lastPrompt > 60 * 1000) {
+                Serial.println("=== 等待用户配网中，请双击按钮启动配网模式 ===");
+                
+                // 在屏幕上显示配网引导界面
+                si_show_wifi_config_guide();
+                
+                lastPrompt = millis();
+            }
         }
     }
-    // 配置状态下，
-    if (wm.getConfigPortalActive() && millis() - _idle_millis > TIME_TO_SLEEP) {
-        go_sleep();
+    // 配置状态下，延长超时时间并在休眠前刷新屏幕
+    if (wm.getConfigPortalActive()) {
+        unsigned long configTime = millis() - _idle_millis;
+        unsigned long remainingTime = TIME_TO_SLEEP - configTime;
+        
+        // 每60秒更新一次屏幕倒计时
+        static unsigned long lastConfigPrompt = 0;
+        if (millis() - lastConfigPrompt > 60 * 1000) {
+            int remainingMinutes = (int)(remainingTime / 60000);
+            Serial.printf("=== 配网模式运行中，剩余时间: %d分钟 ===\n", remainingMinutes);
+            
+            // 在屏幕上显示配网倒计时
+            si_show_config_countdown(remainingMinutes);
+            
+            lastConfigPrompt = millis();
+        }
+        
+        if (configTime > TIME_TO_SLEEP) {
+            Serial.println("=== 配网模式超时，准备进入休眠 ===");
+            
+            // 在休眠前显示超时提示界面
+            si_show_config_timeout();
+            
+            Serial.println("=== 配网模式超时，进入休眠 ===");
+            go_sleep();
+        }
     }
 
     delay(10);
@@ -239,26 +381,37 @@ void preSaveParamsCallback() {
 // 双击打开配置页面
 void buttonDoubleClick(void* oneButton) {
     Serial.println("Button double click.");
+    
     if (wm.getConfigPortalActive()) {
+        Serial.println("配置模式中，重启设备");
         ESP.restart();
         return;
     }
+
+    Serial.println("=== 启动配网模式 ===");
+    
+    // 显示配网模式界面
+    si_show_config_mode();
 
     if (weather_status == 0) {
         weather_stop();
     }
 
+    // 确保WiFi处于正确状态
+    WiFi.mode(WIFI_AP_STA);  // 设置为AP+STA模式
+    delay(100);
+
     // 设置配置页面
     // 根据配置信息设置默认值
     Preferences pref;
     pref.begin(PREF_NAMESPACE);
-    String qHost = pref.getString(PREF_QWEATHER_HOST);
-    String qToken = pref.getString(PREF_QWEATHER_KEY);
+    String qHost = pref.getString(PREF_QWEATHER_HOST, "api.qweather.com");
+    String qToken = pref.getString(PREF_QWEATHER_KEY, "");
     String qType = pref.getString(PREF_QWEATHER_TYPE, "0");
-    String qLoc = pref.getString(PREF_QWEATHER_LOC);
-    String cddLabel = pref.getString(PREF_CD_DAY_LABLE);
-    String cddDate = pref.getString(PREF_CD_DAY_DATE);
-    String tagDays = pref.getString(PREF_TAG_DAYS);
+    String qLoc = pref.getString(PREF_QWEATHER_LOC, "");
+    String cddLabel = pref.getString(PREF_CD_DAY_LABLE, "");
+    String cddDate = pref.getString(PREF_CD_DAY_DATE, "");
+    String tagDays = pref.getString(PREF_TAG_DAYS, "");
     String week1st = pref.getString(PREF_SI_WEEK_1ST, "0");
     pref.end();
 
@@ -271,7 +424,8 @@ void buttonDoubleClick(void* oneButton) {
     para_tag_days.setValue(tagDays.c_str(), 30);
     para_si_week_1st.setValue(week1st.c_str(), 1);
 
-    wm.setTitle("J-Calendar");
+    // 重新初始化WiFiManager以确保干净状态
+    wm.setTitle("J-Calendar 电子日历配置");
     wm.addParameter(&para_si_week_1st);
     wm.addParameter(&para_qweather_host);
     wm.addParameter(&para_qweather_key);
@@ -280,15 +434,32 @@ void buttonDoubleClick(void* oneButton) {
     wm.addParameter(&para_cd_day_label);
     wm.addParameter(&para_cd_day_date);
     wm.addParameter(&para_tag_days);
-    // std::vector<const char *> menu = {"wifi","wifinoscan","info","param","custom","close","sep","erase","update","restart","exit"};
+    
+    // 自定义菜单，优化用户体验
     std::vector<const char*> menu = { "wifi","param","update","sep","info","restart","exit" };
-    wm.setMenu(menu); // custom menu, pass vector
+    wm.setMenu(menu);
     wm.setConfigPortalBlocking(false);
     wm.setBreakAfterConfig(true);
     wm.setPreSaveParamsCallback(preSaveParamsCallback);
     wm.setSaveParamsCallback(saveParamsCallback);
     wm.setSaveConnect(false); // 保存完wifi信息后是否自动连接，设置为否，以便于用户继续配置param。
-    wm.startConfigPortal("J-Calendar", "password");
+    
+    // 设置AP配置
+    wm.setAPStaticIPConfig(IPAddress(192,168,4,1), IPAddress(192,168,4,1), IPAddress(255,255,255,0));
+    
+    Serial.println("=== 正在启动配置门户 ===");
+    Serial.println("热点名称: J-Calendar");
+    Serial.println("热点密码: password");
+    Serial.println("配置地址: http://192.168.4.1");
+    
+    // 启动配置门户
+    bool result = wm.startConfigPortal("J-Calendar", "password");
+    
+    if (result) {
+        Serial.println("=== 配网模式启动成功 ===");
+    } else {
+        Serial.println("=== 配网模式启动失败 ===");
+    }
 
     led_config(); // LED 进入三快闪状态
 
@@ -300,13 +471,21 @@ void buttonDoubleClick(void* oneButton) {
 // 重置系统，并重启
 void buttonLongPressStop(void* oneButton) {
     Serial.println("Button long press.");
+    Serial.println("=== 清除所有配置信息 ===");
 
-    // 删除Preferences，namespace下所有健值对。
+    // 清除WiFiManager保存的WiFi配置
+    wm.resetSettings();
+    Serial.println("WiFi配置已清除");
+
+    // 删除应用程序配置
     Preferences pref;
     pref.begin(PREF_NAMESPACE);
     pref.clear();
     pref.end();
+    Serial.println("应用配置已清除");
 
+    Serial.println("=== 配置清除完成，重启设备 ===");
+    delay(1000);
     ESP.restart();
 }
 
@@ -368,9 +547,8 @@ void go_sleep() {
     esp_sleep_enable_timer_wakeup(p * (uint64_t)uS_TO_S_FACTOR);
     
 #ifdef ESP32C3_BUILD
-    // ESP32-C3使用GPIO唤醒
-    esp_sleep_enable_gpio_wakeup();
-    gpio_wakeup_enable(PIN_BUTTON_USED, GPIO_INTR_LOW_LEVEL);
+    // ESP32-C3使用深度睡眠GPIO唤醒
+    esp_deep_sleep_enable_gpio_wakeup(1ULL << PIN_BUTTON_USED, ESP_GPIO_WAKEUP_GPIO_LOW);
 #else
     // 原始ESP32使用ext0唤醒
     esp_sleep_enable_ext0_wakeup(PIN_BUTTON_USED, 0);

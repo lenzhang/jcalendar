@@ -12,6 +12,10 @@
 #include "GxEPD2_display_selection_new_style.h"
 #include "esp32c3_pins.h"  // ESP32-C3引脚配置
 
+#ifdef ESP32C3_BUILD
+#include <SPI.h>  // ESP32-C3需要手动SPI配置
+#endif
+
 #include "font.h"
 #define ROTATION 0
 
@@ -812,10 +816,10 @@ void si_calendar() {
 
     Preferences pref;
     pref.begin(PREF_NAMESPACE);
-    int32_t _calendar_date = pref.getInt(PREF_SI_CAL_DATE);
-    _cd_day_label = pref.getString(PREF_CD_DAY_LABLE);
-    _cd_day_date = pref.getString(PREF_CD_DAY_DATE);
-    _tag_days_str = pref.getString(PREF_TAG_DAYS);
+    int32_t _calendar_date = pref.getInt(PREF_SI_CAL_DATE, 0);
+    _cd_day_label = pref.getString(PREF_CD_DAY_LABLE, "");
+    _cd_day_date = pref.getString(PREF_CD_DAY_DATE, "");
+    _tag_days_str = pref.getString(PREF_TAG_DAYS, "");
     _week_1st = pref.getString(PREF_SI_WEEK_1ST, "0").toInt();
     pref.end();
 
@@ -881,6 +885,13 @@ int si_calendar_status() {
  */
 void task_screen(void* param) {
     Serial.println("[Task] screen update begin...");
+
+#ifdef ESP32C3_BUILD
+    // ESP32-C3需要手动配置SPI引脚
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+    Serial.printf("ESP32-C3 SPI初始化: CLK=%d, MOSI=%d, CS=%d\n", 
+                  SPI_CLK_PIN, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
 
     display.init(115200);          // 串口使能 初始化完全刷新使能 复位时间 ret上拉使能
     display.setRotation(ROTATION); // 设置屏幕旋转1和3是横向  0和2是纵向
@@ -952,10 +963,106 @@ static bool _screen_test_passed = false;
  * 开机屏幕测试 - 显示简单内容确认屏幕工作正常
  */
 void si_screen_test() {
-    Serial.println("=== 开机屏幕测试开始 ===");
+    Serial.println("=== 最基础屏幕驱动测试 ===");
+    
+#ifdef ESP32C3_BUILD
+    // ESP32-C3需要手动配置SPI引脚
+    Serial.println("配置ESP32-C3 SPI引脚...");
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+    Serial.printf("ESP32-C3 SPI初始化: CLK=%d, MOSI=%d, CS=%d\n", 
+                  SPI_CLK_PIN, SPI_MOSI_PIN, EPD_CS_PIN);
+    delay(1000);
+#endif
+    
+    // 最基础的显示器初始化
+    Serial.println("初始化显示器...");
+    display.init(115200);  // 使用默认参数
+    Serial.println("显示器初始化完成");
+    delay(1000);
+    
+    // 设置旋转
+    display.setRotation(0);  // 使用默认旋转
+    Serial.printf("屏幕尺寸: %d x %d\n", display.width(), display.height());
+    
+    // 最简单的测试 - 全屏填充
+    Serial.println("测试1: 全屏白色");
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    display.display();
+    delay(3000);
+    
+    Serial.println("测试2: 全屏黑色");
+    display.fillScreen(GxEPD_BLACK);
+    display.display();
+    delay(3000);
+    
+    Serial.println("测试3: 全屏红色");
+    display.fillScreen(GxEPD_RED);
+    display.display();
+    delay(3000);
+    
+    Serial.println("测试4: 简单图形");
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 绘制简单的黑色矩形
+    display.fillRect(50, 50, 100, 100, GxEPD_BLACK);
+    display.fillRect(200, 50, 100, 100, GxEPD_RED);
+    
+    // 绘制边框
+    display.drawRect(0, 0, display.width(), display.height(), GxEPD_BLACK);
+    
+    display.display();
+    delay(3000);
+    
+    Serial.println("测试5: 连续刷新测试");
+    for(int i = 0; i < 5; i++) {
+        Serial.printf("刷新 %d/5\n", i+1);
+        
+        display.fillScreen(GxEPD_WHITE);
+        
+        // 绘制移动的矩形
+        int x = 50 + i * 50;
+        display.fillRect(x, 100, 50, 50, GxEPD_BLACK);
+        display.fillRect(x, 200, 50, 50, GxEPD_RED);
+        
+        display.display();
+        delay(2000);
+    }
+    
+    // 最终测试 - 清屏
+    Serial.println("最终测试: 清屏");
+    display.fillScreen(GxEPD_WHITE);
+    display.display();
+    
+    // 关闭电源
+    display.powerOff();
+    
+    _screen_test_passed = true;
+    Serial.println("=== 基础屏幕驱动测试完成 ===");
+}
+
+/**
+ * 检查屏幕测试是否通过
+ */
+bool si_screen_test_passed() {
+    return _screen_test_passed;
+}
+
+///////////// WiFi配网引导屏幕 //////////////
+
+/**
+ * 显示WiFi配网引导界面
+ */
+void si_show_wifi_config_guide() {
+    Serial.println("=== 显示WiFi配网引导界面 ===");
+    
+#ifdef ESP32C3_BUILD
+    // ESP32-C3需要手动配置SPI引脚
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
     
     // 初始化显示器
-    display.init(115200);
+    display.init(115200, true, 2, false);
     display.setRotation(ROTATION);
     u8g2Fonts.begin(display);
     
@@ -969,72 +1076,369 @@ void si_screen_test() {
     u8g2Fonts.setForegroundColor(GxEPD_BLACK);
     u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
     
-    // 显示标题
-    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
-    u8g2Fonts.setCursor(50, 50);
-    u8g2Fonts.print("ESP32-C3 电子墨水屏");
-    
-    u8g2Fonts.setCursor(80, 80);
-    u8g2Fonts.print("屏幕测试");
-    
-    // 显示版本信息
-    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
-    u8g2Fonts.setCursor(50, 120);
-    u8g2Fonts.print("合宙CORE-ESP32-C3开发板");
-    
-    u8g2Fonts.setCursor(50, 140);
-    u8g2Fonts.print("4.2寸三色电子墨水屏");
-    
-    // 显示引脚配置信息
-    u8g2Fonts.setCursor(50, 170);
-    u8g2Fonts.printf("CS: GPIO%d  DC: GPIO%d", EPD_CS_PIN, EPD_DC_PIN);
-    
-    u8g2Fonts.setCursor(50, 190);
-    u8g2Fonts.printf("RST: GPIO%d  BUSY: GPIO%d", EPD_RST_PIN, EPD_BUSY_PIN);
-    
-    u8g2Fonts.setCursor(50, 210);
-    u8g2Fonts.printf("CLK: GPIO%d  MOSI: GPIO%d", SPI_CLK_PIN, SPI_MOSI_PIN);
-    
-    // 显示测试图形
     // 绘制边框
     display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
-    display.drawRect(12, 12, display.width()-24, display.height()-24, GxEPD_BLACK);
     
-    // 绘制一些测试图形
-    display.fillCircle(350, 100, 20, GxEPD_RED);
-    display.drawCircle(350, 100, 25, GxEPD_BLACK);
+    // 显示标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(80, 80);
+    u8g2Fonts.print("J-Calendar");
     
-    display.fillRect(320, 150, 60, 30, GxEPD_RED);
-    display.drawRect(318, 148, 64, 34, GxEPD_BLACK);
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(90, 110);
+    u8g2Fonts.print("电子日历");
     
-    // 显示状态信息
-    u8g2Fonts.setCursor(50, 250);
-    u8g2Fonts.print("如果能看到此内容，说明屏幕工作正常");
+    // 显示配网提示
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(50, 160);
+    u8g2Fonts.print("需要配置WiFi网络");
     
-    u8g2Fonts.setForegroundColor(GxEPD_RED);
-    u8g2Fonts.setCursor(50, 270);
-    u8g2Fonts.print("红色文字测试 - 三色屏功能正常");
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(30, 190);
+    u8g2Fonts.print("双击按钮启动配网模式");
     
-    // 显示时间戳
-    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
-    u8g2Fonts.setCursor(200, 290);
-    u8g2Fonts.printf("测试时间: %lu ms", millis());
+    u8g2Fonts.setCursor(30, 210);
+    u8g2Fonts.print("或连接已有WiFi网络");
     
     // 刷新显示
-    Serial.println("正在刷新屏幕...");
     display.display();
-    
-    // 关闭屏幕电源
     display.powerOff();
     
-    _screen_test_passed = true;
-    Serial.println("=== 开机屏幕测试完成 ===");
-    Serial.println("屏幕测试成功！如果屏幕显示正常，将继续执行主程序。");
+    Serial.println("WiFi配网引导界面显示完成");
 }
 
 /**
- * 检查屏幕测试是否通过
+ * 显示WiFi连接状态界面
  */
-bool si_screen_test_passed() {
-    return _screen_test_passed;
+void si_show_wifi_connecting(const char* ssid) {
+    Serial.printf("=== 显示WiFi连接状态: %s ===\n", ssid);
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    // 局部刷新 - 只更新状态区域
+    display.setPartialWindow(0, 0, display.width(), 100);
+    display.fillScreen(GxEPD_WHITE);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 连接状态
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(30, 30);
+    u8g2Fonts.print("📶 正在连接WiFi...");
+    
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(30, 55);
+    u8g2Fonts.printf("网络: %s", ssid);
+    
+    // 动态指示器
+    static int indicator = 0;
+    u8g2Fonts.setCursor(30, 75);
+    for(int i = 0; i < 3; i++) {
+        if(i == indicator % 3) {
+            u8g2Fonts.print("●");
+        } else {
+            u8g2Fonts.print("○");
+        }
+        u8g2Fonts.print(" ");
+    }
+    indicator++;
+    
+    display.display(true); // 局部刷新
+    // 不关闭电源，保持连接状态显示
 }
+
+/**
+ * 显示WiFi连接失败界面
+ */
+void si_show_wifi_failed() {
+    Serial.println("=== 显示WiFi连接失败界面 ===");
+    
+    // 局部刷新状态区域
+    display.setPartialWindow(0, 0, display.width(), 100);
+    display.fillScreen(GxEPD_WHITE);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setForegroundColor(GxEPD_RED);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(30, 30);
+    u8g2Fonts.print("❌ WiFi连接失败");
+    
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(30, 55);
+    u8g2Fonts.print("双击按钮重新配置网络");
+    
+    u8g2Fonts.setCursor(30, 75);
+    u8g2Fonts.print("10秒后进入休眠模式");
+    
+    display.display(true); // 局部刷新
+    display.powerOff();
+}
+
+/**
+ * 显示配网模式启动界面
+ */
+void si_show_config_mode() {
+    Serial.println("=== 显示配网模式启动界面 ===");
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 绘制边框
+    display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示WiFi图标和标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(70, 70);
+    u8g2Fonts.print("配网模式");
+    
+    // 显示状态信息
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(60, 110);
+    u8g2Fonts.print("WiFi热点已启动");
+    
+    // 显示连接信息
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(30, 150);
+    u8g2Fonts.print("热点名称: J-Calendar");
+    
+    u8g2Fonts.setCursor(30, 175);
+    u8g2Fonts.print("热点密码: password");
+    
+    u8g2Fonts.setCursor(30, 200);
+    u8g2Fonts.print("配置地址: 192.168.4.1");
+    
+    // 显示操作提示
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(20, 230);
+    u8g2Fonts.print("请连接热点并访问配置页面");
+    
+    display.display();
+    display.powerOff();
+    
+    Serial.println("配网模式启动界面显示完成");
+}
+
+/**
+ * 显示配网超时界面
+ */
+void si_show_config_timeout() {
+    Serial.println("=== 显示配网超时界面 ===");
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 绘制边框
+    display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示超时标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(80, 70);
+    u8g2Fonts.print("配网超时");
+    
+    // 显示超时信息
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(50, 110);
+    u8g2Fonts.print("配网模式已超时");
+    
+    u8g2Fonts.setCursor(60, 140);
+    u8g2Fonts.print("设备即将休眠");
+    
+    // 显示操作提示
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(20, 180);
+    u8g2Fonts.print("唤醒后可重新双击按钮配网");
+    
+    u8g2Fonts.setCursor(30, 200);
+    u8g2Fonts.print("或连接已有WiFi网络");
+    
+    u8g2Fonts.setCursor(40, 220);
+    u8g2Fonts.print("按GPIO0唤醒设备");
+    
+    display.display();
+    display.powerOff();
+    
+    Serial.println("配网超时界面显示完成");
+}
+
+/**
+ * 显示配网倒计时界面
+ */
+void si_show_config_countdown(int remainingMinutes) {
+    Serial.printf("=== 显示配网倒计时界面: %d分钟 ===\n", remainingMinutes);
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    // 局部刷新 - 只更新倒计时区域
+    display.setPartialWindow(0, 200, display.width(), 50);
+    display.fillScreen(GxEPD_WHITE);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示倒计时
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(30, 230);
+    u8g2Fonts.printf("配网剩余时间: %d分钟", remainingMinutes);
+    
+    display.display(true); // 局部刷新
+    // 不关闭电源，保持显示
+    
+    Serial.println("配网倒计时界面显示完成");
+}
+
+/**
+ * 显示启动等待界面
+ */
+void si_show_startup_waiting(int remainingSeconds) {
+    Serial.printf("=== 显示启动等待界面: %d秒 ===\n", remainingSeconds);
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 绘制边框
+    display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(80, 70);
+    u8g2Fonts.print("设备启动");
+    
+    // 显示等待信息
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(50, 110);
+    u8g2Fonts.print("等待用户操作中");
+    
+    u8g2Fonts.setCursor(60, 140);
+    u8g2Fonts.printf("倒计时: %d秒", remainingSeconds);
+    
+    // 显示操作提示
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(20, 180);
+    u8g2Fonts.print("双击按钮可进入配网模式");
+    
+    u8g2Fonts.setCursor(30, 200);
+    u8g2Fonts.print("或等待自动进入休眠");
+    
+    u8g2Fonts.setCursor(40, 220);
+    u8g2Fonts.print("按GPIO0可唤醒设备");
+    
+    display.display();
+    display.powerOff();
+    
+    Serial.println("启动等待界面显示完成");
+}
+
+/**
+ * 显示WiFi连接失败重试界面
+ */
+void si_show_wifi_retry() {
+    Serial.println("=== 显示WiFi连接失败重试界面 ===");
+    
+#ifdef ESP32C3_BUILD
+    SPI.begin(SPI_CLK_PIN, -1, SPI_MOSI_PIN, EPD_CS_PIN);
+#endif
+    
+    display.init(115200, true, 2, false);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 绘制边框
+    display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
+    
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(70, 70);
+    u8g2Fonts.print("WiFi连接失败");
+    
+    // 显示失败信息
+    u8g2Fonts.setFont(u8g2_font_wqy14_t_gb2312);
+    u8g2Fonts.setCursor(50, 110);
+    u8g2Fonts.print("网络连接失败");
+    
+    u8g2Fonts.setCursor(60, 140);
+    u8g2Fonts.print("60秒后重试");
+    
+    // 显示操作提示
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(20, 180);
+    u8g2Fonts.print("可能原因：密码错误、信号弱");
+    
+    u8g2Fonts.setCursor(30, 200);
+    u8g2Fonts.print("双击按钮重新配置网络");
+    
+    u8g2Fonts.setCursor(40, 220);
+    u8g2Fonts.print("或等待自动重试");
+    
+    display.display();
+    display.powerOff();
+    
+    Serial.println("WiFi连接失败重试界面显示完成");
+}
+

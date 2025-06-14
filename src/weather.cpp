@@ -36,7 +36,7 @@ void task_weather(void* param) {
 
     Preferences pref;
     pref.begin(PREF_NAMESPACE);
-    _weather_type = pref.getString(PREF_QWEATHER_TYPE).compareTo("1") == 0 ? 1 : 0;
+    _weather_type = pref.getString(PREF_QWEATHER_TYPE, "0").compareTo("1") == 0 ? 1 : 0;
     pref.end();
 
     Serial.printf("Weather Type: %d\n", _weather_type);

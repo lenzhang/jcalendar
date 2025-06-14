@@ -28,8 +28,8 @@
 
 // SPI硬件引脚配置
 #define SPI_MOSI_PIN    GPIO_NUM_3     // 引脚20 - GPIO3 (SPI数据输出)
-#define SPI_MISO_PIN    GPIO_NUM_2     // 引脚19 - GPIO2 (SPI数据输入，通常不用)
 #define SPI_CLK_PIN     GPIO_NUM_2     // 引脚19 - GPIO2 (SPI时钟)
+// 注意：电子墨水屏是单向通信，不需要MISO引脚
 
 // 开发板LED引脚 (可用于状态指示)
 #define LED_D4_PIN      12    // GPIO12 - 高电平有效
@@ -78,8 +78,8 @@
 
 // ESP32-C3 兼容的按钮和LED引脚配置
 #ifdef ESP32C3_BUILD
-    // ESP32-C3 按钮引脚 (支持RTC唤醒)
-    #define PIN_BUTTON_ESP32C3  GPIO_NUM_9   // GPIO9 - BOOT按键，支持RTC唤醒
+    // ESP32-C3 按钮引脚 (支持深度睡眠唤醒)
+    #define PIN_BUTTON_ESP32C3  GPIO_NUM_0   // GPIO0 - 支持深度睡眠唤醒的RTC GPIO
     
     // ESP32-C3 LED引脚 (使用开发板LED)
     #define PIN_LED_ESP32C3     GPIO_NUM_12  // GPIO12 - D4 LED，高电平有效
