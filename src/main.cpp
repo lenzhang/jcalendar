@@ -13,8 +13,15 @@
 
 #include "version.h"
 
-#define PIN_BUTTON GPIO_NUM_14 // 注意：由于此按键负责唤醒，因此需要选择支持RTC唤醒的PIN脚。
-OneButton button(PIN_BUTTON, true);
+// ESP32-C3兼容性配置
+#ifdef ESP32C3_BUILD
+    #include "esp32c3_pins.h"
+    #define PIN_BUTTON_USED PIN_BUTTON  // 使用ESP32-C3配置的按钮引脚
+#else
+    #define PIN_BUTTON_USED GPIO_NUM_14 // 原始ESP32按钮引脚
+#endif
+
+OneButton button(PIN_BUTTON_USED, true);
 
 void IRAM_ATTR checkTicks() {
     button.tick();
@@ -79,13 +86,34 @@ void setup() {
     button.attachDoubleClick(buttonDoubleClick, &button);
     // button.attachMultiClick()
     button.attachLongPressStop(buttonLongPressStop, &button);
-    attachInterrupt(digitalPinToInterrupt(PIN_BUTTON), checkTicks, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(PIN_BUTTON_USED), checkTicks, CHANGE);
 
     Serial.printf("***********************\r\n");
     Serial.printf("      J-Calendar\r\n");
     Serial.printf("    version: %s\r\n", J_VERSION);
     Serial.printf("***********************\r\n\r\n");
     Serial.printf("Copyright © 2022-2025 JADE Software Co., Ltd. All Rights Reserved.\r\n\r\n");
+
+#ifdef ESP32C3_BUILD
+    Serial.println("检测到ESP32-C3构建配置");
+    Serial.printf("按钮引脚: GPIO%d\n", PIN_BUTTON_USED);
+    Serial.printf("LED引脚: GPIO%d\n", PIN_LED);
+    Serial.printf("屏幕引脚: CS=%d, DC=%d, RST=%d, BUSY=%d\n", 
+                  EPD_CS_PIN, EPD_DC_PIN, EPD_RST_PIN, EPD_BUSY_PIN);
+    
+    // 执行开机屏幕测试
+    Serial.println("开始执行开机屏幕测试...");
+    si_screen_test();
+    
+    // 等待屏幕测试完成
+    delay(3000);
+    
+    if (si_screen_test_passed()) {
+        Serial.println("屏幕测试通过，继续执行主程序");
+    } else {
+        Serial.println("屏幕测试失败，请检查接线");
+    }
+#endif
 
     led_init();
     led_fast();
@@ -338,7 +366,15 @@ void go_sleep() {
     }
 
     esp_sleep_enable_timer_wakeup(p * (uint64_t)uS_TO_S_FACTOR);
-    esp_sleep_enable_ext0_wakeup(PIN_BUTTON, 0);
+    
+#ifdef ESP32C3_BUILD
+    // ESP32-C3使用GPIO唤醒
+    esp_sleep_enable_gpio_wakeup();
+    gpio_wakeup_enable(PIN_BUTTON_USED, GPIO_INTR_LOW_LEVEL);
+#else
+    // 原始ESP32使用ext0唤醒
+    esp_sleep_enable_ext0_wakeup(PIN_BUTTON_USED, 0);
+#endif
 
     // 省电考虑，关闭RTC外设和存储器
     // esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_OFF); // RTC IO, sensors and ULP, 注意：由于需要按键唤醒，所以不能关闭，否则会导致RTC_IO唤醒失败
@@ -347,10 +383,22 @@ void go_sleep() {
 
     // 省电考虑，重置gpio，平均每针脚能省8ua。
     gpio_reset_pin(PIN_LED); // 减小deep-sleep电流
-    gpio_reset_pin(GPIO_NUM_5); // 减小deep-sleep电流
-    gpio_reset_pin(GPIO_NUM_17); // 减小deep-sleep电流
-    gpio_reset_pin(GPIO_NUM_16); // 减小deep-sleep电流
-    gpio_reset_pin(GPIO_NUM_4); // 减小deep-sleep电流
+    
+#ifdef ESP32C3_BUILD
+    // ESP32-C3 屏幕引脚重置
+    gpio_reset_pin(EPD_CS_PIN);   // CS引脚
+    gpio_reset_pin(EPD_DC_PIN);   // DC引脚  
+    gpio_reset_pin(EPD_RST_PIN);  // RST引脚
+    gpio_reset_pin(EPD_BUSY_PIN); // BUSY引脚
+    gpio_reset_pin(SPI_CLK_PIN);  // CLK引脚
+    gpio_reset_pin(SPI_MOSI_PIN); // MOSI引脚
+#else
+    // 原始ESP32引脚重置
+    gpio_reset_pin(GPIO_NUM_5);   // 减小deep-sleep电流
+    gpio_reset_pin(GPIO_NUM_17);  // 减小deep-sleep电流
+    gpio_reset_pin(GPIO_NUM_16);  // 减小deep-sleep电流
+    gpio_reset_pin(GPIO_NUM_4);   // 减小deep-sleep电流
+#endif
 
     delay(10);
     Serial.println("Deep sleep...");

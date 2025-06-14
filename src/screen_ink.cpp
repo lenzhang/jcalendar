@@ -10,15 +10,23 @@
 #include <U8g2_for_Adafruit_GFX.h>
 #include <GxEPD2_3C.h>
 #include "GxEPD2_display_selection_new_style.h"
+#include "esp32c3_pins.h"  // ESP32-C3引脚配置
 
 #include "font.h"
 #define ROTATION 0
 
-GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, GxEPD2_DRIVER_CLASS::HEIGHT> display(GxEPD2_DRIVER_CLASS(/*CS=D8*/ 5, /*DC=D3*/ 17, /*RST=D4*/ 16, /*BUSY=D2*/ 4));
+// ESP32-C3 电子墨水屏显示器配置
+// 使用预定义的引脚配置，可在esp32c3_pins.h中切换不同方案
+GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, GxEPD2_DRIVER_CLASS::HEIGHT> display(GxEPD2_DRIVER_CLASS(
+    EPD_CS_PIN,    // SPI片选
+    EPD_DC_PIN,    // 数据/命令选择  
+    EPD_RST_PIN,   // 复位
+    EPD_BUSY_PIN   // 忙信号检测
+));
 U8G2_FOR_ADAFRUIT_GFX u8g2Fonts;
 
 
-#define FONT_TEXT u8g2_font_wqy16_t_gb2312 // 224825bytes，最大字库（天气描述中“霾”，只有此字库中有）
+#define FONT_TEXT u8g2_font_wqy16_t_gb2312 // 224825bytes，最大字库（天气描述中"霾"，只有此字库中有）
 #define FONT_SUB u8g2_font_wqy12_t_gb2312 // 次要字体，u8g2最小字体
 const String week_str[] = { "日", "一", "二", "三", "四", "五", "六" };
 // const String tg_str[] = { "甲", "乙", "丙", "丁", "戊", "己", "庚", "辛", "壬", "癸" };            // 天干
@@ -935,4 +943,98 @@ void print_status() {
     Serial.printf("Weather: %d\n", weather_status());
     Serial.printf("Calendar: %d\n", si_calendar_status());
     Serial.printf("Screen: %d\n", si_screen_status());
+}
+
+///////////// 开机屏幕测试 //////////////
+static bool _screen_test_passed = false;
+
+/**
+ * 开机屏幕测试 - 显示简单内容确认屏幕工作正常
+ */
+void si_screen_test() {
+    Serial.println("=== 开机屏幕测试开始 ===");
+    
+    // 初始化显示器
+    display.init(115200);
+    display.setRotation(ROTATION);
+    u8g2Fonts.begin(display);
+    
+    // 清屏并设置全屏刷新
+    display.setFullWindow();
+    display.fillScreen(GxEPD_WHITE);
+    
+    // 设置字体和颜色
+    u8g2Fonts.setFontMode(1);
+    u8g2Fonts.setFontDirection(0);
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setBackgroundColor(GxEPD_WHITE);
+    
+    // 显示标题
+    u8g2Fonts.setFont(u8g2_font_wqy16_t_gb2312);
+    u8g2Fonts.setCursor(50, 50);
+    u8g2Fonts.print("ESP32-C3 电子墨水屏");
+    
+    u8g2Fonts.setCursor(80, 80);
+    u8g2Fonts.print("屏幕测试");
+    
+    // 显示版本信息
+    u8g2Fonts.setFont(u8g2_font_wqy12_t_gb2312);
+    u8g2Fonts.setCursor(50, 120);
+    u8g2Fonts.print("合宙CORE-ESP32-C3开发板");
+    
+    u8g2Fonts.setCursor(50, 140);
+    u8g2Fonts.print("4.2寸三色电子墨水屏");
+    
+    // 显示引脚配置信息
+    u8g2Fonts.setCursor(50, 170);
+    u8g2Fonts.printf("CS: GPIO%d  DC: GPIO%d", EPD_CS_PIN, EPD_DC_PIN);
+    
+    u8g2Fonts.setCursor(50, 190);
+    u8g2Fonts.printf("RST: GPIO%d  BUSY: GPIO%d", EPD_RST_PIN, EPD_BUSY_PIN);
+    
+    u8g2Fonts.setCursor(50, 210);
+    u8g2Fonts.printf("CLK: GPIO%d  MOSI: GPIO%d", SPI_CLK_PIN, SPI_MOSI_PIN);
+    
+    // 显示测试图形
+    // 绘制边框
+    display.drawRect(10, 10, display.width()-20, display.height()-20, GxEPD_BLACK);
+    display.drawRect(12, 12, display.width()-24, display.height()-24, GxEPD_BLACK);
+    
+    // 绘制一些测试图形
+    display.fillCircle(350, 100, 20, GxEPD_RED);
+    display.drawCircle(350, 100, 25, GxEPD_BLACK);
+    
+    display.fillRect(320, 150, 60, 30, GxEPD_RED);
+    display.drawRect(318, 148, 64, 34, GxEPD_BLACK);
+    
+    // 显示状态信息
+    u8g2Fonts.setCursor(50, 250);
+    u8g2Fonts.print("如果能看到此内容，说明屏幕工作正常");
+    
+    u8g2Fonts.setForegroundColor(GxEPD_RED);
+    u8g2Fonts.setCursor(50, 270);
+    u8g2Fonts.print("红色文字测试 - 三色屏功能正常");
+    
+    // 显示时间戳
+    u8g2Fonts.setForegroundColor(GxEPD_BLACK);
+    u8g2Fonts.setCursor(200, 290);
+    u8g2Fonts.printf("测试时间: %lu ms", millis());
+    
+    // 刷新显示
+    Serial.println("正在刷新屏幕...");
+    display.display();
+    
+    // 关闭屏幕电源
+    display.powerOff();
+    
+    _screen_test_passed = true;
+    Serial.println("=== 开机屏幕测试完成 ===");
+    Serial.println("屏幕测试成功！如果屏幕显示正常，将继续执行主程序。");
+}
+
+/**
+ * 检查屏幕测试是否通过
+ */
+bool si_screen_test_passed() {
+    return _screen_test_passed;
 }

@@ -3,7 +3,11 @@
 
 #include <Arduino.h>
 
-#define PIN_LED GPIO_NUM_22
+#ifdef ESP32C3_BUILD
+    #include "esp32c3_pins.h"
+#else
+    #define PIN_LED GPIO_NUM_22
+#endif
 
 void led_init();
 void led_fast();

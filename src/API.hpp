@@ -106,7 +106,7 @@ private:
                     if (isGzip) {
                         // gzip解压缩
                         uint8_t* outBuf = NULL;
-                        size_t outLen = 0;
+                        uint32_t outLen = 0;  // 修改为uint32_t类型
                         ArduinoUZlib::decompress((uint8_t*)s.c_str(), (uint32_t)s.length(), outBuf, outLen);
                         error = deserializeJson(doc, (char*)outBuf, outLen);
                     } else {

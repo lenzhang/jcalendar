@@ -1,11 +1,27 @@
 # J-Calendar
+
 墨水屏日历，采用三色4.2寸墨水屏，展示基本月历信息，支持农历、公共假期、倒计日、天气（实时天气、每日天气）展示。<br>
 项目以低难度、低成本的方式，方便爱好者实现属于自己的低功耗月历。<br>
 <img src="./assets/img/sample.jpg" width="60%"><br>
-Bilibili连接：https://www.bilibili.com/video/BV1wHDhYoE3G/<br>
+
+## 致谢 🙏
+
+**特别感谢原作者 [JADE-Jerry](https://github.com/JADE-Jerry/jcalendar) 的开源贡献！**
+
+- 原项目地址：https://github.com/JADE-Jerry/jcalendar
+- Bilibili视频：https://www.bilibili.com/video/BV1wHDhYoE3G/
+- 本项目基于原作者的优秀工作，增加了ESP32-C3支持和相关优化
+
+## 版本说明
+
+- **原版ESP32**: 基于原作者设计，使用外部驱动板
+- **ESP32-C3版本**: 新增支持，直连屏幕，简化接线，增加自动测试功能
+
 注：固件仅供个人下载免费使用，禁止商用。
 
 ## Prepare & Meterial
+
+### 原版ESP32
 1. esp32开发板(建议lolin32 lite,其他esp32开发板亦可)<br>
 2. 4.2寸三色墨水屏(400*300)。
 3. 通用墨水屏驱动板。
@@ -14,7 +30,23 @@ Bilibili连接：https://www.bilibili.com/video/BV1wHDhYoE3G/<br>
 6. 轻触开关,(12\*12\*7.3,带键帽)
 7. 工具:电烙铁、电线若干。
 
+### ESP32-C3版本 🆕
+1. **合宙CORE-ESP32-C3开发板** (已解锁GPIO11)
+2. **4.2寸三色墨水屏** GDEY042Z98 (400*300)
+3. **直连接线** (无需驱动板，直接连接)
+4. **锂电池** ph2.0接头 (可选，支持USB供电)
+5. **工具**: 杜邦线若干
+
+**ESP32-C3优势**:
+- ✅ 无需外部按钮和LED (使用板载)
+- ✅ 直连屏幕，无需驱动板
+- ✅ USB-C供电和调试
+- ✅ 开机自动屏幕测试
+- ✅ 连续引脚接线，布线整齐
+
 ## Manufacture Guide:
+
+### 原版ESP32接线
 1. 开发板接线<br>
     * 墨水屏驱动板
         * Busy->4
@@ -28,18 +60,58 @@ Bilibili连接：https://www.bilibili.com/video/BV1wHDhYoE3G/<br>
     * 其他
         * 按钮->(PIN_14, GND)
         * LED->22(板载)
+
+### ESP32-C3接线 🆕
+**合宙CORE-ESP32-C3开发板直连方案**:
+
+| 电子墨水屏 | 开发板引脚 | GPIO | 功能 |
+|-----------|----------|------|------|
+| VCC       | 引脚18   | 3.3V | 电源 |
+| GND       | 引脚17   | GND  | 地线 |
+| CLK       | 引脚19   | GPIO2 | SPI时钟 |
+| MOSI      | 引脚20   | GPIO3 | SPI数据 |
+| RST       | 引脚21   | GPIO10 | 复位 |
+| DC        | 引脚22   | GPIO6 | 数据/命令 |
+| CS        | 引脚23   | GPIO7 | 片选 |
+| BUSY      | 引脚24   | GPIO11 | 忙检测 |
+
+**按钮和LED**: 使用板载BOOT按钮(GPIO9)和D4 LED(GPIO12)
 2. 三色墨水屏排线插入时注意针脚方向,屏幕排线和驱动板排线1号针脚均是悬空,注意对齐。
 3. 电池接口需要是ph2.0,且注意正负极(开发板上有标注),如果电池的正负极反了,可以用镊子调整电池插头。
 4. 烧录固件<br>
-    使用ESP32的烧录工具flash_download_tool烧录固件. [Flash Download Tools](https://www.espressif.com/en/support/download/other-tools?keys=flash+download+tools)
-    1. 选择烧录的文件和烧录地址（bootloader.bin与partitions.bin烧录过一次后，就不需要重复烧录了）
-    2. 选择Flash的配置信息
-    3. 选择连接的串口以及波特率（波特率可以根据实际情况调整）
-    4. 擦除Flash。
-    5. 开始烧录。<br>
-    <span style="color:red">注：文件前面一定要打勾，否则不会刷进flash的！！！</span><br>
-    （参考下图）<br>
-    <img src="./assets/img/flash_download_tool_guide.png" width="70%">
+
+### 原版ESP32烧录
+使用ESP32的烧录工具flash_download_tool烧录固件. [Flash Download Tools](https://www.espressif.com/en/support/download/other-tools?keys=flash+download+tools)
+1. 选择烧录的文件和烧录地址（bootloader.bin与partitions.bin烧录过一次后，就不需要重复烧录了）
+2. 选择Flash的配置信息
+3. 选择连接的串口以及波特率（波特率可以根据实际情况调整）
+4. 擦除Flash。
+5. 开始烧录。<br>
+<span style="color:red">注：文件前面一定要打勾，否则不会刷进flash的！！！</span><br>
+（参考下图）<br>
+<img src="./assets/img/flash_download_tool_guide.png" width="70%">
+
+### ESP32-C3烧录 🆕
+**使用PlatformIO (推荐)**:
+```bash
+# 使用构建脚本（推荐）
+./build_esp32c3.sh
+
+# 或手动执行
+pio run -e esp32c3 -t upload --upload-port /dev/ttyACM0
+```
+
+**使用Arduino IDE**:
+1. 选择开发板: ESP32C3 Dev Module  
+2. 设置参数: Upload Speed 115200, Flash Mode DIO
+3. 编译上传
+
+**ESP32-C3特色功能**:
+- ✅ **开机屏幕测试**: 自动验证屏幕连接和引脚配置
+- ✅ **LED状态指示**: GPIO12 LED实时显示系统状态  
+- ✅ **板载按钮控制**: 使用BOOT按钮(GPIO9)，无需外接
+- ✅ **直连屏幕**: 无需驱动板，连续引脚接线
+- ✅ **USB-C调试**: 方便开发和监控
 5. 安装盒，3D打印，用PLA或ABS均可。[E-ink box2 v22.3mf](./assets/file/E-ink%20box2%20v22.3mf)
 
 ## Button Operation Guide:
