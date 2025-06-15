@@ -46,6 +46,13 @@
 
 ## Manufacture Guide:
 
+墨水屏排线转SPI使用这个连接的转接板做的转接：https://item.taobao.com/item.htm?id=905255697919&spm=tbpc.boughtlist.suborder_itemtitle.1.34312e8dsEaklq
+
+![f99f02651cfa3d83ff4165016e909d4](https://github.com/user-attachments/assets/b3c7cb7a-fa24-4cca-b9ff-f24a644ca979)
+
+![12f0117e0d39331bba7e7031d766566](https://github.com/user-attachments/assets/fed507af-b337-47ab-bd89-93230ded9ba0)
+
+
 ### 原版ESP32接线
 1. 开发板接线<br>
     * 墨水屏驱动板
